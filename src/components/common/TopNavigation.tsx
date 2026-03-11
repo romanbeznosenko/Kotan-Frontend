@@ -98,21 +98,6 @@ const TopNavigation = () => {
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    {!isMobile && (
-                        <button style={{
-                            backgroundColor: PRIMARY,
-                            color: '#fff',
-                            padding: '0.5rem 1.25rem',
-                            borderRadius: '0.5rem',
-                            fontSize: '0.875rem',
-                            fontWeight: 700,
-                            border: 'none',
-                            cursor: 'pointer',
-                        }}>
-                            Strefa Rodzica
-                        </button>
-                    )}
-
                     {isMobile && (
                         <button
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
