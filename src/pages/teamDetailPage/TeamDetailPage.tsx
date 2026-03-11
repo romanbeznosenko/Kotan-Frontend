@@ -30,7 +30,7 @@ const TeamDetailPage = () => {
                     gap: '2rem',
                     boxSizing: 'border-box',
                 }}>
-                    <TeamInfoCards />
+                    <TeamInfoCards coach="Jan Kowalski" league="Liga Wojewódzka Junior" location="Stadion Miejski, Ozorków" />
                     <TeamDetailTabs active={activeTab} onChange={handleTabChange} />
                     <SquadSection />
                     <MatchesSection />

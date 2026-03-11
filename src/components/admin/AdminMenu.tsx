@@ -1,7 +1,6 @@
 import React from 'react';
 import { TrophyOutlined } from '@ant-design/icons';
 import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
-import GroupsIcon from '@mui/icons-material/Groups';
 import AssistWalkerIcon from '@mui/icons-material/AssistWalker';
 import SportsIcon from '@mui/icons-material/Sports';
 import ArticleIcon from '@mui/icons-material/Article';

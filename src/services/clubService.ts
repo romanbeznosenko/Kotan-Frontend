@@ -14,12 +14,13 @@ export interface ClubPageResponse {
 
 export interface ClubResponse {
     id: string;
-    name: string;  
+    name: string;
     shortName: string;
     city: string;
     country: string;
     logo: string;
     isOnline: boolean;
+    isOurClub: boolean;
 }
 
 export interface ClubRequest {

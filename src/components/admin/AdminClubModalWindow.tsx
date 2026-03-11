@@ -10,6 +10,7 @@ interface FieldType {
     city: string;
     country: string;
     isOurClub: boolean;
+    logo?: any;
 }
 
 interface AdminClubModalWindowProps {
