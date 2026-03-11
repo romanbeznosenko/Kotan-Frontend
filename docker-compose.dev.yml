@@ -3,9 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: kotan-frontend-dev
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
+    container_name: kotan-frontend
     restart: unless-stopped
+    networks:
+      - kotan-backend_inside
+
+networks:
+  kotan-backend_inside:
+    external: true
