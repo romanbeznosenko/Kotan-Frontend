@@ -1,10 +1,8 @@
-const PRIMARY = '#46a5fd';
-
 interface TeamHeroProps {
     onMoreClick?: () => void;
 }
 
-const TeamHero = ({ onMoreClick }: TeamHeroProps) => (
+const TeamHero = ({ }: TeamHeroProps) => (
     <div style={{
         display: 'flex',
         flexDirection: 'row',
@@ -29,24 +27,6 @@ const TeamHero = ({ onMoreClick }: TeamHeroProps) => (
                 Poznaj drużyny akademii Kotan Ozorków oraz ich rozgrywki.
             </p>
         </div>
-        <button
-            onClick={onMoreClick}
-            style={{
-                height: 48,
-                padding: '0 1.5rem',
-                backgroundColor: PRIMARY,
-                color: '#fff',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                border: 'none',
-                borderRadius: '0.5rem',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'opacity 0.2s',
-            }}
-        >
-            Więcej o klubie
-        </button>
     </div>
 );
 
