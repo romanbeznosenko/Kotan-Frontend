@@ -9,6 +9,13 @@ export interface TeamListResponse {
     name: string;
     ageGroup: AgeGroupEnum;
     gender: GenderEnum;
+    coachName?: string;
+    photo?: string;
+}
+
+export interface TeamFilters {
+    gender?: GenderEnum;
+    ageGroup?: AgeGroupEnum;
 }
 
 export interface TeamPageResponse {
@@ -36,11 +43,17 @@ const baseUrl = (clubId: string) => `${import.meta.env.VITE_API_BASE_URL}/api/ad
 
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem('jwt')}` });
 
-export const listTeams = async (clubId: string): Promise<TeamPageResponse> => {
-    const response = await axios.get<ApiResponse<TeamPageResponse>>(`${baseUrl(clubId)}/list`, {
+export const listTeams = async (
+    clubId: string,
+    page = 1,
+    limit = 10,
+    filters: TeamFilters = {},
+): Promise<TeamPageResponse> => {
+    const response = await axios.get<TeamPageResponse>(`${baseUrl(clubId)}/list`, {
         headers: authHeader(),
+        params: { page, limit, ...filters },
     });
-    return response.data.data;
+    return response.data;
 };
 
 export const getTeam = async (clubId: string, teamId: string): Promise<TeamResponse> => {

@@ -3,8 +3,13 @@ import type { ApiResponse } from "../types/api";
 
 export interface ClubListResponse {
     id: string;
-    name: string;  
+    name: string;
+    shortName: string;
+    city: string;
     logo: string;
+    country?: string;
+    isOurClub?: boolean;
+    isOnline?: boolean;
 }
 
 export interface ClubPageResponse {
@@ -40,11 +45,11 @@ export interface ClubFilters {
 
 export const listClubs = async (page: number, limit: number, filters: ClubFilters = {}): Promise<ClubPageResponse> => {
     const token = localStorage.getItem('jwt');
-    const response = await axios.get<ApiResponse<ClubPageResponse>>(`${BASE_URL}/list`, {
+    const response = await axios.get<ClubPageResponse>(`${BASE_URL}/list`, {
         headers: { Authorization: `Bearer ${token}` },
         params: { page, limit, ...filters },
     });
-    return response.data.data;
+    return response.data;
 }
 
 export const getClub = async (id: string): Promise<ClubResponse> => {
@@ -75,10 +80,10 @@ export const uploadClubLogo = async (id: string, file: File): Promise<void> => {
     });
 }
 
-export const createClubWithLogo = async (data: ClubRequest, file: File): Promise<void> => {
+export const createClubWithLogo = async (data: ClubRequest, file?: File): Promise<void> => {
     const token = localStorage.getItem('jwt');
     const formData = new FormData();
-    formData.append('file', file);
+    if (file) formData.append('file', file);
     formData.append('request', new Blob([JSON.stringify(data)], { type: 'application/json' }));
     await axios.post<ApiResponse<null>>(`${BASE_URL}/`, formData, {
         headers: {
