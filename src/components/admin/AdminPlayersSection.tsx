@@ -1,55 +1,76 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { listClubs } from '../../services/clubService';
+import { listTeams, type TeamListResponse } from '../../services/teamService';
+import {
+    listPlayers,
+    type PlayerListResponse,
+    type PositionEnum,
+    type GenderEnum,
+} from '../../services/playerService';
 import AdminPlayerFormSection, { type PlayerFormData } from './AdminPlayerFormSection';
 
-type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
-type Gender = 'Mężczyźni' | 'Kobiety' | '';
-
-interface MockPlayer {
-    id: string;
-    firstName: string;
-    lastName: string;
-    number: string;
-    position: Position;
-    teamName: string;
-    teamSub: string;
-    season: string;
-    avatarUrl?: string;
-}
-
-const MOCK_PLAYERS: MockPlayer[] = [
-    { id: '1', firstName: 'Jakub',  lastName: 'Kowalski',    number: '10', position: 'FWD', teamName: 'U-19 Elite',  teamSub: 'Academy First Team', season: '2025/2026' },
-    { id: '2', firstName: 'Marta',  lastName: 'Wiśniewska',  number: '04', position: 'DEF', teamName: 'U-17 Junior', teamSub: 'Academy Girls',      season: '2025/2026' },
-    { id: '3', firstName: 'Piotr',  lastName: 'Nowak',       number: '01', position: 'GK',  teamName: 'U-19 Elite',  teamSub: 'Academy First Team', season: '2025/2026' },
-    { id: '4', firstName: 'Adam',   lastName: 'Lewandowski',  number: '08', position: 'MID', teamName: 'U-19 Elite',  teamSub: 'Academy First Team', season: '2025/2026' },
-];
-
-const POSITION_BADGE: Record<Position, { bg: string; color: string }> = {
-    FWD: { bg: 'rgba(239,68,68,0.12)',   color: '#b91c1c' },
-    DEF: { bg: 'rgba(34,197,94,0.12)',   color: '#15803d' },
-    GK:  { bg: 'rgba(59,130,246,0.12)',  color: '#1d4ed8' },
-    MID: { bg: 'rgba(249,115,22,0.12)',  color: '#c2410c' },
-};
-
+const KOTAN_CLUB_NAME = 'Kotan Ozorków';
 const PAGE_SIZE = 10;
 
+const POSITION_LABEL: Record<PositionEnum, string> = {
+    GOALKEEPER: 'GK',
+    DEFENDER:   'DEF',
+    MIDFIELDER: 'MID',
+    STRIKER:    'FWD',
+};
+
+const POSITION_BADGE: Record<PositionEnum, { bg: string; color: string }> = {
+    STRIKER:    { bg: 'rgba(239,68,68,0.12)',  color: '#b91c1c' },
+    DEFENDER:   { bg: 'rgba(34,197,94,0.12)',  color: '#15803d' },
+    GOALKEEPER: { bg: 'rgba(59,130,246,0.12)', color: '#1d4ed8' },
+    MIDFIELDER: { bg: 'rgba(249,115,22,0.12)', color: '#c2410c' },
+};
+
 const AdminPlayersSection = () => {
-    const [editPlayer, setEditPlayer] = useState<PlayerFormData | null>(null);
-    const [showCreate, setShowCreate] = useState(false);
-    const [players, setPlayers] = useState<MockPlayer[]>(MOCK_PLAYERS);
-    const [filterSeason, setFilterSeason] = useState('2025/2026');
-    const [filterTeam, setFilterTeam] = useState('');
-    const [filterPosition, setFilterPosition] = useState('');
-    const [filterGender, setFilterGender] = useState<Gender>('');
-    const [page, setPage] = useState(1);
+    const [showCreate, setShowCreate]   = useState(false);
+    const [editPlayer, setEditPlayer]   = useState<PlayerFormData | null>(null);
+
+    const [players, setPlayers]         = useState<PlayerListResponse[]>([]);
+    const [total, setTotal]             = useState(0);
+    const [loading, setLoading]         = useState(false);
+    const [page, setPage]               = useState(1);
+    const [refreshKey, setRefreshKey]   = useState(0);
+
+    const [teams, setTeams]             = useState<TeamListResponse[]>([]);
+    const [filterTeamId, setFilterTeamId]       = useState('');
+    const [filterPosition, setFilterPosition]   = useState<PositionEnum | ''>('');
+    const [filterGender, setFilterGender]       = useState<GenderEnum | ''>('');
+
+    // Load Kotan club's teams for the filter dropdown
+    useEffect(() => {
+        listClubs(1, 100).then(({ data }) => {
+            const kotan = data.find(c => c.name === KOTAN_CLUB_NAME) ?? data[0];
+            if (!kotan) return;
+            listTeams(kotan.id, 1, 100).then(({ data: tData }) => setTeams(tData));
+        });
+    }, []);
+
+    // Load players whenever filters / page change
+    useEffect(() => {
+        setLoading(true);
+        listPlayers(page, PAGE_SIZE, {
+            teamId:   filterTeamId   || undefined,
+            position: filterPosition || undefined,
+            gender:   filterGender   || undefined,
+        })
+            .then(({ data, count }) => { setPlayers(data); setTotal(count); })
+            .catch(() => { setPlayers([]); setTotal(0); })
+            .finally(() => setLoading(false));
+    }, [page, filterTeamId, filterPosition, filterGender, refreshKey]);
+
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     if (showCreate) {
         return (
             <AdminPlayerFormSection
+                teams={teams}
                 onBack={() => setShowCreate(false)}
-                onSaved={created => {
-                    setPlayers(ps => [...ps, { ...created, id: String(Date.now()), teamSub: created.teamName, position: created.position as Position || 'MID' }]);
-                    setShowCreate(false);
-                }}
+                onSaved={() => { setRefreshKey(k => k + 1); setShowCreate(false); }}
             />
         );
     }
@@ -58,24 +79,12 @@ const AdminPlayersSection = () => {
         return (
             <AdminPlayerFormSection
                 player={editPlayer}
+                teams={teams}
                 onBack={() => setEditPlayer(null)}
-                onSaved={updated => {
-                    setPlayers(ps => ps.map(p => p.id === updated.id ? { ...p, ...updated, position: updated.position as Position || p.position } : p));
-                    setEditPlayer(null);
-                }}
+                onSaved={() => { setRefreshKey(k => k + 1); setEditPlayer(null); }}
             />
         );
     }
-
-    const filtered = players.filter(p => {
-        if (filterTeam && p.teamName !== filterTeam) return false;
-        if (filterPosition && p.position !== filterPosition) return false;
-        return true;
-    });
-
-    const total = filtered.length;
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     const selectStyle: React.CSSProperties = {
         background: 'transparent', border: 'none', fontSize: '0.875rem',
@@ -114,51 +123,38 @@ const AdminPlayersSection = () => {
             <div style={{ background: '#f1f3fb', padding: '1rem', borderRadius: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '1rem', marginBottom: '2rem' }}>
                 {[
                     {
-                        label: 'Sezon',
-                        node: (
-                            <select style={selectStyle} value={filterSeason} onChange={e => { setFilterSeason(e.target.value); setPage(1); }}>
-                                <option>2025/2026</option>
-                                <option>2024/2025</option>
-                            </select>
-                        ),
-                    },
-                    {
                         label: 'Zespół',
                         node: (
-                            <select style={selectStyle} value={filterTeam} onChange={e => { setFilterTeam(e.target.value); setPage(1); }}>
+                            <select style={selectStyle} value={filterTeamId} onChange={e => { setFilterTeamId(e.target.value); setPage(1); }}>
                                 <option value=''>Wszystkie</option>
-                                <option>U-19 Elite</option>
-                                <option>U-17 Junior</option>
+                                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                         ),
                     },
                     {
                         label: 'Pozycja',
                         node: (
-                            <select style={selectStyle} value={filterPosition} onChange={e => { setFilterPosition(e.target.value); setPage(1); }}>
+                            <select style={selectStyle} value={filterPosition} onChange={e => { setFilterPosition(e.target.value as PositionEnum | ''); setPage(1); }}>
                                 <option value=''>Wszystkie</option>
-                                <option>GK</option>
-                                <option>DEF</option>
-                                <option>MID</option>
-                                <option>FWD</option>
+                                <option value='GOALKEEPER'>GK</option>
+                                <option value='DEFENDER'>DEF</option>
+                                <option value='MIDFIELDER'>MID</option>
+                                <option value='STRIKER'>FWD</option>
                             </select>
                         ),
                     },
                     {
                         label: 'Płeć',
                         node: (
-                            <select style={selectStyle} value={filterGender} onChange={e => { setFilterGender(e.target.value as Gender); setPage(1); }}>
+                            <select style={selectStyle} value={filterGender} onChange={e => { setFilterGender(e.target.value as GenderEnum | ''); setPage(1); }}>
                                 <option value=''>Wszystkie</option>
-                                <option>Mężczyźni</option>
-                                <option>Kobiety</option>
+                                <option value='MEN'>Mężczyźni</option>
+                                <option value='WOMEN'>Kobiety</option>
                             </select>
                         ),
                     },
                 ].map(f => (
-                    <div
-                        key={f.label}
-                        style={{ background: '#fff', padding: '0.75rem 1rem', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.375rem', minWidth: '140px', flex: '1 1 140px' }}
-                    >
+                    <div key={f.label} style={{ background: '#fff', padding: '0.75rem 1rem', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.375rem', minWidth: '160px', flex: '1 1 160px' }}>
                         <label style={{ fontSize: '10px', fontWeight: 700, color: '#404752', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{f.label}</label>
                         {f.node}
                     </div>
@@ -171,7 +167,7 @@ const AdminPlayersSection = () => {
                     <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
                         <thead>
                             <tr style={{ background: '#f1f3fb' }}>
-                                {['Zdjęcie', 'Imię i Nazwisko', 'Nr', 'Pozycja', 'Zespół', 'Sezon', 'Akcje'].map(col => (
+                                {['Zdjęcie', 'Imię i Nazwisko', 'Nr', 'Pozycja', 'Akcje'].map(col => (
                                     <th key={col} style={{ padding: '1rem 1.5rem', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#404752', textAlign: col === 'Akcje' ? 'right' : col === 'Nr' ? 'center' : 'left', whiteSpace: 'nowrap' }}>
                                         {col}
                                     </th>
@@ -179,26 +175,45 @@ const AdminPlayersSection = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {paged.length === 0 ? (
+                            {loading ? (
                                 <tr>
-                                    <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
+                                    <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
+                                        Ładowanie…
+                                    </td>
+                                </tr>
+                            ) : players.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
                                         Brak zawodników
                                     </td>
                                 </tr>
-                            ) : paged.map((player, i) => {
+                            ) : players.map((player, i) => {
                                 const badge = POSITION_BADGE[player.position];
                                 return (
                                     <tr
                                         key={player.id}
                                         style={{ borderTop: i > 0 ? '1px solid #f8fafc' : 'none', transition: 'background 0.15s', cursor: 'pointer' }}
-                                        onClick={() => setEditPlayer({ id: player.id, firstName: player.firstName, lastName: player.lastName, birthYear: '2008', gender: 'MALE', season: player.season, teamName: player.teamName, position: player.position, number: player.number, isCaptain: false, avatarUrl: player.avatarUrl })}
+                                        onClick={() => setEditPlayer({
+                                            id: player.id,
+                                            firstName: player.firstName,
+                                            lastName: player.lastName,
+                                            birthDate: '',
+                                            gender: 'MALE',
+                                            season: '',
+                                            teamId: filterTeamId,
+                                            teamName: '',
+                                            position: player.position,
+                                            number: player.jerseyNumber,
+                                            isCaptain: false,
+                                            avatarUrl: player.photo ?? undefined,
+                                        })}
                                         onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = '#f1f3fb'}
                                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
                                     >
                                         {/* Photo */}
                                         <td style={{ padding: '1rem 1.5rem' }}>
-                                            {player.avatarUrl ? (
-                                                <img src={player.avatarUrl} alt="Player" style={{ width: '2.5rem', height: '2.5rem', borderRadius: '0.5rem', objectFit: 'cover' }} />
+                                            {player.photo ? (
+                                                <img src={player.photo} alt="Player" style={{ width: '2.5rem', height: '2.5rem', borderRadius: '0.5rem', objectFit: 'cover' }} />
                                             ) : (
                                                 <div style={{ width: '2.5rem', height: '2.5rem', borderRadius: '0.5rem', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     <span className="material-symbols-outlined" style={{ color: '#cbd5e1', fontSize: '1.25rem' }}>person</span>
@@ -215,26 +230,15 @@ const AdminPlayersSection = () => {
                                         {/* Number */}
                                         <td style={{ padding: '1rem 1.5rem', textAlign: 'center' }}>
                                             <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 900, fontSize: '1.25rem', color: 'rgba(0,97,163,0.35)' }}>
-                                                {player.number}
+                                                {player.jerseyNumber}
                                             </span>
                                         </td>
 
                                         {/* Position */}
                                         <td style={{ padding: '1rem 1.5rem' }}>
                                             <span style={{ display: 'inline-flex', padding: '0.125rem 0.5rem', borderRadius: '0.25rem', fontSize: '10px', fontWeight: 900, background: badge.bg, color: badge.color, textTransform: 'uppercase' }}>
-                                                {player.position}
+                                                {POSITION_LABEL[player.position]}
                                             </span>
-                                        </td>
-
-                                        {/* Team */}
-                                        <td style={{ padding: '1rem 1.5rem' }}>
-                                            <p style={{ fontWeight: 600, fontSize: '0.875rem', margin: 0 }}>{player.teamName}</p>
-                                            <p style={{ fontSize: '10px', color: '#404752', margin: '0.125rem 0 0' }}>{player.teamSub}</p>
-                                        </td>
-
-                                        {/* Season */}
-                                        <td style={{ padding: '1rem 1.5rem' }}>
-                                            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#404752' }}>{player.season}</span>
                                         </td>
 
                                         {/* Actions */}
@@ -284,37 +288,12 @@ const AdminPlayersSection = () => {
                 </div>
             </div>
 
-            {/* Stat Cards */}
+            {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
                 {[
-                    {
-                        icon: 'group',
-                        iconBg: 'rgba(0,97,163,0.1)',
-                        iconColor: '#0061a3',
-                        label: 'Aktywni Zawodnicy',
-                        value: '128',
-                        extra: <span style={{ marginLeft: 'auto', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '0.125rem', fontSize: '0.75rem', fontWeight: 700 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '0.875rem' }}>trending_up</span>12%
-                        </span>,
-                    },
-                    {
-                        icon: 'star',
-                        iconBg: 'rgba(133,84,0,0.1)',
-                        iconColor: '#855400',
-                        label: 'Top Prospekty',
-                        value: '14',
-                        extra: null,
-                    },
-                    {
-                        icon: 'medical_services',
-                        iconBg: 'rgba(239,68,68,0.1)',
-                        iconColor: '#dc2626',
-                        label: 'Kontuzjowani',
-                        value: '3',
-                        extra: <span style={{ marginLeft: 'auto', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: '0.875rem' }}>warning</span>
-                        </span>,
-                    },
+                    { icon: 'group',            iconBg: 'rgba(0,97,163,0.1)',    iconColor: '#0061a3', label: 'Aktywni Zawodnicy', value: String(total) },
+                    { icon: 'star',             iconBg: 'rgba(133,84,0,0.1)',    iconColor: '#855400', label: 'Top Prospekty',     value: '—' },
+                    { icon: 'medical_services', iconBg: 'rgba(239,68,68,0.1)',   iconColor: '#dc2626', label: 'Kontuzjowani',      value: '—' },
                 ].map(card => (
                     <div key={card.label} style={{ background: '#f1f3fb', padding: '1.5rem', borderRadius: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', background: card.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -324,7 +303,6 @@ const AdminPlayersSection = () => {
                             <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#404752', margin: 0 }}>{card.label}</p>
                             <p style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: "'Manrope', sans-serif", margin: '0.125rem 0 0', color: '#181c21' }}>{card.value}</p>
                         </div>
-                        {card.extra}
                     </div>
                 ))}
             </div>
