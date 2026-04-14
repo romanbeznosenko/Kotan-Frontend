@@ -1,4 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPlayer, editPlayer, type PositionEnum, type GenderEnum } from '../../services/playerService';
+import type { TeamListResponse } from '../../services/teamService';
 
 export type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
 export type PlayerGender = 'MALE' | 'FEMALE';
@@ -7,24 +9,38 @@ export interface PlayerFormData {
     id?: string;
     firstName: string;
     lastName: string;
-    birthYear: string;
+    /** ISO date string YYYY-MM-DD */
+    birthDate: string;
     gender: PlayerGender;
     season: string;
+    teamId: string;
     teamName: string;
-    position: Position | '';
+    position: Position | PositionEnum | '';
     number: string;
     isCaptain: boolean;
     avatarUrl?: string;
 }
 
+const UI_TO_API_POSITION: Record<string, PositionEnum> = {
+    GK:  'GOALKEEPER',
+    DEF: 'DEFENDER',
+    MID: 'MIDFIELDER',
+    FWD: 'STRIKER',
+    // pass-through if already API enum
+    GOALKEEPER: 'GOALKEEPER',
+    DEFENDER:   'DEFENDER',
+    MIDFIELDER: 'MIDFIELDER',
+    STRIKER:    'STRIKER',
+};
+
 interface Props {
     /** If provided → edit mode; omit or null → create mode */
     player?: PlayerFormData | null;
+    teams: TeamListResponse[];
     onBack: () => void;
-    onSaved: (data: PlayerFormData) => void;
+    onSaved: () => void;
 }
 
-const BIRTH_YEARS = Array.from({ length: 20 }, (_, i) => String(2014 - i));
 const SEASONS = ['2025/2026', '2024/2025', '2023/2024'];
 
 const POS_CONFIG: { key: Position; label: string; activeBg: string; activeColor: string; idleBg: string; idleColor: string; border: string }[] = [
@@ -35,32 +51,41 @@ const POS_CONFIG: { key: Position; label: string; activeBg: string; activeColor:
 ];
 
 const EMPTY: PlayerFormData = {
-    firstName: '', lastName: '', birthYear: '2010',
-    gender: 'MALE', season: '2025/2026', teamName: '',
+    firstName: '', lastName: '', birthDate: '',
+    gender: 'MALE', season: '2025/2026', teamId: '', teamName: '',
     position: '', number: '', isCaptain: false,
 };
 
-const AdminPlayerFormSection = ({ player, onBack, onSaved }: Props) => {
+const AdminPlayerFormSection = ({ player, teams, onBack, onSaved }: Props) => {
     const isEdit = Boolean(player?.id);
     const initial = player ?? EMPTY;
 
     const [firstName, setFirstName] = useState(initial.firstName);
     const [lastName,  setLastName]  = useState(initial.lastName);
-    const [birthYear, setBirthYear] = useState(initial.birthYear || '2010');
+    const [birthDate, setBirthDate] = useState(initial.birthDate || '');
     const [gender,    setGender]    = useState<PlayerGender>(initial.gender || 'MALE');
     const [season,    setSeason]    = useState(initial.season || SEASONS[0]);
-    const [teamName,  setTeamName]  = useState(initial.teamName);
-    const [position,  setPosition]  = useState<Position | ''>(initial.position);
+    const [teamId,    setTeamId]    = useState(initial.teamId || '');
+    const [position,  setPosition]  = useState<Position | ''>(
+        initial.position ? (UI_TO_API_POSITION[initial.position] ? initial.position as Position : initial.position as Position) : ''
+    );
     const [number,    setNumber]    = useState(initial.number);
     const [isCaptain, setIsCaptain] = useState(initial.isCaptain);
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(initial.avatarUrl ?? null);
     const [dropHover, setDropHover] = useState(false);
     const [saving, setSaving]       = useState(false);
     const [errors, setErrors]       = useState<Record<string, string>>({});
 
+    // Pre-select first team if none set
+    useEffect(() => {
+        if (!teamId && teams.length > 0) setTeamId(teams[0].id);
+    }, [teams]);
+
     const fileRef = useRef<HTMLInputElement>(null);
 
     const handleFile = (file: File) => {
+        setAvatarFile(file);
         setAvatarPreview(URL.createObjectURL(file));
     };
 
@@ -69,6 +94,8 @@ const AdminPlayerFormSection = ({ player, onBack, onSaved }: Props) => {
         if (!firstName.trim()) e.firstName = 'Required';
         if (!lastName.trim())  e.lastName  = 'Required';
         if (!position)         e.position  = 'Select a position';
+        if (!teamId)           e.teamId    = 'Select a team';
+        if (!birthDate)        e.birthDate = 'Required';
         setErrors(e);
         return Object.keys(e).length === 0;
     };
@@ -76,10 +103,19 @@ const AdminPlayerFormSection = ({ player, onBack, onSaved }: Props) => {
     const handleSave = async () => {
         if (!validate()) return;
         setSaving(true);
-        // TODO: wire to playerService.createPlayer / editPlayer
-        await new Promise(r => setTimeout(r, 600));
-        setSaving(false);
-        onSaved({ ...initial, firstName, lastName, birthYear, gender, season, teamName, position, number, isCaptain, avatarUrl: avatarPreview ?? undefined });
+        try {
+            const apiPosition = UI_TO_API_POSITION[position] ?? (position as PositionEnum);
+            const apiGender: GenderEnum = gender === 'MALE' ? 'MEN' : 'WOMEN';
+            const payload = { firstName, lastName, position: apiPosition, gender: apiGender, jerseyNumber: number, birthDate };
+            if (isEdit && initial.id) {
+                await editPlayer(initial.id, teamId, payload, avatarFile);
+            } else {
+                await createPlayer(teamId, payload, avatarFile);
+            }
+            onSaved();
+        } finally {
+            setSaving(false);
+        }
     };
 
     /* ── shared styles ─────────────────────────────────────── */
@@ -222,16 +258,17 @@ const AdminPlayerFormSection = ({ player, onBack, onSaved }: Props) => {
                                 </div>
 
                                 <div>
-                                    <label style={labelStyle}>Birth Year</label>
-                                    <select
-                                        style={{ ...inputStyle(), cursor: 'pointer' }}
-                                        value={birthYear}
-                                        onChange={e => setBirthYear(e.target.value)}
+                                    <label style={labelStyle}>Birth Date</label>
+                                    <input
+                                        type="date"
+                                        style={{ ...inputStyle(!!errors.birthDate), cursor: 'pointer' }}
+                                        value={birthDate}
+                                        max={new Date().toISOString().split('T')[0]}
+                                        onChange={e => { setBirthDate(e.target.value); setErrors(v => ({ ...v, birthDate: '' })); }}
                                         onFocus={e => { (e.currentTarget as HTMLElement).style.background = '#fff'; (e.currentTarget as HTMLElement).style.borderColor = '#0061a3'; }}
-                                        onBlur={e  => { (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}
-                                    >
-                                        {BIRTH_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                                    </select>
+                                        onBlur={e  => { (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; if (!errors.birthDate) (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}
+                                    />
+                                    {errors.birthDate && <p style={{ color: '#ba1a1a', fontSize: '0.75rem', margin: '0.25rem 0 0 0.25rem' }}>{errors.birthDate}</p>}
                                 </div>
 
                                 <div>
@@ -270,28 +307,18 @@ const AdminPlayerFormSection = ({ player, onBack, onSaved }: Props) => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
 
                                 <div>
-                                    <label style={labelStyle}>Season</label>
-                                    <select
-                                        style={{ ...inputStyle(), cursor: 'pointer' }}
-                                        value={season}
-                                        onChange={e => setSeason(e.target.value)}
-                                        onFocus={e => { (e.currentTarget as HTMLElement).style.background = '#fff'; (e.currentTarget as HTMLElement).style.borderColor = '#0061a3'; }}
-                                        onBlur={e  => { (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}
-                                    >
-                                        {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-
-                                <div>
                                     <label style={labelStyle}>Academy Team</label>
-                                    <input
-                                        style={inputStyle()}
-                                        placeholder="e.g. U15 Elite"
-                                        value={teamName}
-                                        onChange={e => setTeamName(e.target.value)}
+                                    <select
+                                        style={{ ...inputStyle(!!errors.teamId), cursor: 'pointer' }}
+                                        value={teamId}
+                                        onChange={e => { setTeamId(e.target.value); setErrors(v => ({ ...v, teamId: '' })); }}
                                         onFocus={e => { (e.currentTarget as HTMLElement).style.background = '#fff'; (e.currentTarget as HTMLElement).style.borderColor = '#0061a3'; }}
-                                        onBlur={e  => { (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}
-                                    />
+                                        onBlur={e  => { (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; if (!errors.teamId) (e.currentTarget as HTMLElement).style.borderColor = 'transparent'; }}
+                                    >
+                                        <option value=''>Select team…</option>
+                                        {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                    {errors.teamId && <p style={{ color: '#ba1a1a', fontSize: '0.75rem', margin: '0.25rem 0 0 0.25rem' }}>{errors.teamId}</p>}
                                 </div>
 
                                 <div style={{ gridColumn: '1 / -1' }}>

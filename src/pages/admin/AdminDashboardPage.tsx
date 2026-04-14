@@ -6,6 +6,7 @@ import AdminClubsSection from '../../components/admin/AdminClubsSection';
 import AdminTeamsSection from '../../components/admin/AdminTeamsSection';
 import AdminDashboardSection from '../../components/admin/AdminDashboardSection';
 import AdminPlayersSection from '../../components/admin/AdminPlayersSection';
+import AdminNewsSection from '../../components/admin/AdminNewsSection';
 
 const tableMap: Partial<Record<AdminMenuKey, React.ReactElement>> = {
     dashboard: <AdminDashboardSection />,
@@ -13,6 +14,7 @@ const tableMap: Partial<Record<AdminMenuKey, React.ReactElement>> = {
     clubs: <AdminClubsSection />,
     teams: <AdminTeamsSection />,
     players: <AdminPlayersSection />,
+    articles: <AdminNewsSection />,
 };
 
 const AdminDashboardPage: React.FC = () => {
