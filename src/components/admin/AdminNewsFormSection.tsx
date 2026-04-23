@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ArticleBody, ArticleCategory, MockArticle } from '../../data/mockArticles';
-import { createArticle, editArticle, type ArticleCategoryEnum, type ArticleBodyTypeEnum, type ArticleResponse } from '../../services/articleService';
+import { createArticle, editArticle, deleteArticle, type ArticleCategoryEnum, type ArticleBodyTypeEnum, type ArticleResponse } from '../../services/articleService';
 
 const BODY_TYPE_FROM_API: Record<ArticleBodyTypeEnum, ArticleBody['type']> = {
     PARAGRAPH: 'paragraph',
@@ -111,8 +111,9 @@ const AdminNewsFormSection = ({ article, articleResponse, onBack, onSaved }: Pro
     const [imageHover,       setImageHover]       = useState(false);
     const [heroHover,        setHeroHover]        = useState(false);
 
-    const [errors,  setErrors]  = useState<Record<string, string>>({});
-    const [saving,  setSaving]  = useState(false);
+    const [errors,   setErrors]   = useState<Record<string, string>>({});
+    const [saving,   setSaving]   = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const imageRef     = useRef<HTMLInputElement>(null);
     const heroImageRef = useRef<HTMLInputElement>(null);
@@ -164,6 +165,10 @@ const AdminNewsFormSection = ({ article, articleResponse, onBack, onSaved }: Pro
         setBody(b => b.filter((_, idx) => idx !== i));
     };
 
+    const changeBodyBlockType = (i: number, type: ArticleBody['type']) => {
+        setBody(b => b.map((block, idx) => idx === i ? { ...block, type } : block));
+    };
+
     const moveBodyBlock = (i: number, dir: -1 | 1) => {
         setBody(b => {
             const next = [...b];
@@ -180,6 +185,18 @@ const AdminNewsFormSection = ({ article, articleResponse, onBack, onSaved }: Pro
         if (!excerpt.trim()) e.excerpt  = 'Zajawka jest wymagana';
         setErrors(e);
         return Object.keys(e).length === 0;
+    };
+
+    const handleDelete = async () => {
+        if (!articleResponse) return;
+        if (!window.confirm(`Czy na pewno chcesz usunąć artykuł "${articleResponse.title}"?`)) return;
+        setDeleting(true);
+        try {
+            await deleteArticle(articleResponse.articleId);
+            onBack();
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const handleSave = async () => {
@@ -249,6 +266,45 @@ const AdminNewsFormSection = ({ article, articleResponse, onBack, onSaved }: Pro
                 </nav>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {articleResponse && (
+                        <button
+                            onClick={handleDelete}
+                            disabled={deleting || saving}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '0.375rem',
+                                padding: '0.5rem 1.125rem', border: '1px solid rgba(186,26,26,0.3)',
+                                borderRadius: '0.5rem', background: 'none',
+                                fontSize: '0.8125rem', fontWeight: 700, color: '#ba1a1a',
+                                cursor: deleting ? 'default' : 'pointer', opacity: deleting ? 0.6 : 1,
+                                fontFamily: "'Inter', sans-serif", transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={e => { if (!deleting) (e.currentTarget as HTMLElement).style.background = 'rgba(186,26,26,0.06)'; }}
+                            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'none'}
+                        >
+                            <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>
+                                {deleting ? 'hourglass_empty' : 'delete'}
+                            </span>
+                            {deleting ? 'Usuwanie…' : 'Usuń artykuł'}
+                        </button>
+                    )}
+                    {!isEdit && (
+                        <button
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                padding: '0.5rem 1.125rem', border: 'none', borderRadius: '0.5rem',
+                                background: '#1877F2', color: '#fff',
+                                fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer',
+                                fontFamily: "'Inter', sans-serif",
+                            }}
+                            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#1464d8'}
+                            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#1877F2'}
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.514c-1.491 0-1.956.93-1.956 1.886v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
+                            </svg>
+                            Pobierz z Facebooka
+                        </button>
+                    )}
                     <button
                         onClick={onBack}
                         style={{ padding: '0.5rem 1.25rem', background: 'none', border: 'none', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: 700, color: '#404752', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}
@@ -353,15 +409,28 @@ const AdminNewsFormSection = ({ article, articleResponse, onBack, onSaved }: Pro
                                 {body.map((block, i) => (
                                     <div key={i} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
 
-                                        {/* Type label */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', paddingTop: '0.25rem', flexShrink: 0 }}>
-                                            <span style={{
-                                                fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em',
-                                                color: block.type === 'quote' ? '#855400' : block.type === 'heading' ? '#0061a3' : '#94a3b8',
-                                                writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-                                            }}>
-                                                {BODY_TYPE_LABELS[block.type]}
-                                            </span>
+                                        {/* Type selector */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', paddingTop: '0.125rem', flexShrink: 0 }}>
+                                            {(['paragraph', 'quote', 'heading'] as ArticleBody['type'][]).map(type => {
+                                                const active = block.type === type;
+                                                const color = type === 'quote' ? '#df8f00' : type === 'heading' ? '#0061a3' : '#64748b';
+                                                return (
+                                                    <button
+                                                        key={type}
+                                                        onClick={() => changeBodyBlockType(i, type)}
+                                                        title={BODY_TYPE_LABELS[type]}
+                                                        style={{
+                                                            width: 28, height: 22, padding: 0, border: 'none', borderRadius: '0.3rem',
+                                                            fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em',
+                                                            cursor: 'pointer', transition: 'all 0.15s', fontFamily: "'Inter', sans-serif",
+                                                            background: active ? color : '#f1f3fb',
+                                                            color: active ? '#fff' : '#94a3b8',
+                                                        }}
+                                                    >
+                                                        {type === 'paragraph' ? 'P' : type === 'quote' ? 'Q' : 'H'}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
 
                                         {/* Input */}
