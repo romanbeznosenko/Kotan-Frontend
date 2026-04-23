@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import AdminArticleFormPage from './pages/admin/AdminArticleFormPage'
 import LoginPage from './pages/login/LoginPage'
 import WelcomePage from './pages/welcomePage/WelcomePage'
 import TeamPage from './pages/teamPage/TeamPage'
@@ -19,6 +20,8 @@ function App() {
       <Routes>
         <Route path="/admin/login" element={<LoginPage />} />
         <Route path="/admin" element={<PrivateRoute element={<AdminDashboardPage />} />} />
+        <Route path="/admin/articles/create" element={<PrivateRoute element={<AdminArticleFormPage />} />} />
+        <Route path="/admin/articles/:articleId/edit" element={<PrivateRoute element={<AdminArticleFormPage />} />} />
         <Route path="/" element={<WelcomePage />} />
         <Route path="/teams" element={<TeamPage />} />
         <Route path="/teams/:id" element={<TeamDetailPage />} />
