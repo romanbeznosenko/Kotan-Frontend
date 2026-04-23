@@ -95,6 +95,10 @@ export const editArticle = async (
     return response.data.data;
 };
 
+export const deleteArticle = async (articleId: string): Promise<void> => {
+    await axios.delete(`${BASE_URL}/${articleId}`, { headers: authHeader() });
+};
+
 export const createArticle = async (
     data: ArticleRequest,
     image?: File | null,

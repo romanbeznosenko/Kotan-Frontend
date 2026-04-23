@@ -28,7 +28,7 @@ function App() {
         <Route path="/matches" element={<LeaguePage />} />
         <Route path="/matches/:id" element={<LeagueDetailPage />} />
         <Route path="/news" element={<NewsPage />} />
-        <Route path="/news/:id" element={<NewsDetailPage />} />
+        <Route path="/news/:slug" element={<NewsDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     listArticles,
+    deleteArticle,
     type ArticleCategoryEnum,
     type ArticleListItem,
 } from '../../services/articleService';
@@ -176,6 +177,19 @@ const ArticleRow = ({ article, categoryColor, divider, onEdit, onDeleted }: {
 }) => {
     const [hovered,        setHovered]        = useState(false);
     const [actionsVisible, setActionsVisible] = useState(false);
+    const [deleting,       setDeleting]       = useState(false);
+
+    const handleDelete = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!window.confirm(`Czy na pewno chcesz usunąć artykuł "${article.title}"?`)) return;
+        setDeleting(true);
+        try {
+            await deleteArticle(article.articleId);
+            onDeleted();
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     const formatDate = (iso: string) =>
         new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -230,12 +244,13 @@ const ArticleRow = ({ article, categoryColor, divider, onEdit, onDeleted }: {
                         <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>edit</span>
                     </button>
                     <button
-                        onClick={e => { e.stopPropagation(); onDeleted(); }}
-                        style={{ padding: '0.375rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', borderRadius: '0.375rem', display: 'flex' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ba1a1a'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(186,26,26,0.08)'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#94a3b8'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        style={{ padding: '0.375rem', background: 'none', border: 'none', cursor: deleting ? 'default' : 'pointer', color: deleting ? '#e0e2ea' : '#94a3b8', borderRadius: '0.375rem', display: 'flex', opacity: deleting ? 0.5 : 1 }}
+                        onMouseEnter={e => { if (!deleting) { (e.currentTarget as HTMLButtonElement).style.color = '#ba1a1a'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(186,26,26,0.08)'; } }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = deleting ? '#e0e2ea' : '#94a3b8'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                     >
-                        <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>delete</span>
+                        <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>{deleting ? 'hourglass_empty' : 'delete'}</span>
                     </button>
                 </div>
             </td>
