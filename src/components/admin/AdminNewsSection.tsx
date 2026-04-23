@@ -1,55 +1,49 @@
-import { useState } from 'react';
-import { MOCK_ARTICLES, type ArticleCategory, type MockArticle } from '../../data/mockArticles';
-import AdminNewsFormSection from './AdminNewsFormSection';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+    listArticles,
+    type ArticleCategoryEnum,
+    type ArticleListItem,
+} from '../../services/articleService';
 
-const CATEGORIES: { value: ArticleCategory | ''; label: string; color: string }[] = [
+const CATEGORIES: { value: ArticleCategoryEnum | ''; label: string; color: string }[] = [
     { value: '',        label: 'Wszystkie',   color: '#404752' },
-    { value: 'senior',  label: 'Seniorzy',    color: '#1e293b' },
-    { value: 'junior',  label: 'Junior',      color: '#46a5fd' },
-    { value: 'mlodzik', label: 'Młodzik',     color: '#22c55e' },
-    { value: 'orlik',   label: 'Orlik',       color: '#f97316' },
-    { value: 'zak',     label: 'Żak',         color: '#eab308' },
-    { value: 'girls',   label: 'Girls Teams', color: '#ec4899' },
+    { value: 'SENIOR',  label: 'Seniorzy',    color: '#1e293b' },
+    { value: 'JUNIOR',  label: 'Junior',      color: '#46a5fd' },
+    { value: 'MLODZIK', label: 'Młodzik',     color: '#22c55e' },
+    { value: 'ORLIK',   label: 'Orlik',       color: '#f97316' },
+    { value: 'ZAK',     label: 'Żak',         color: '#eab308' },
+    { value: 'GIRLS',   label: 'Girls Teams', color: '#ec4899' },
 ];
+
+const CATEGORY_COLOR: Record<ArticleCategoryEnum, string> = {
+    SENIOR: '#1e293b', JUNIOR: '#46a5fd', MLODZIK: '#22c55e',
+    ORLIK:  '#f97316', ZAK:    '#eab308', GIRLS:   '#ec4899',
+};
 
 const PAGE_SIZE = 10;
 
+const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
+
 const AdminNewsSection = () => {
-    const [articles,        setArticles]        = useState<MockArticle[]>([...MOCK_ARTICLES]);
-    const [filterCategory,  setFilterCategory]  = useState<ArticleCategory | ''>('');
-    const [page,            setPage]            = useState(1);
-    const [formArticle,     setFormArticle]     = useState<MockArticle | null | undefined>(undefined);
-    // undefined = list view, null = create, MockArticle = edit
+    const navigate = useNavigate();
+    const [articles,       setArticles]       = useState<ArticleListItem[]>([]);
+    const [total,          setTotal]          = useState(0);
+    const [loading,        setLoading]        = useState(false);
+    const [filterCategory, setFilterCategory] = useState<ArticleCategoryEnum | ''>('');
+    const [page,           setPage]           = useState(1);
+    const [refreshKey,     setRefreshKey]     = useState(0);
 
-    // ── Form view ──────────────────────────────────────────────────────────────
-    if (formArticle !== undefined) {
-        return (
-            <AdminNewsFormSection
-                article={formArticle ?? undefined}
-                onBack={() => setFormArticle(undefined)}
-                onSaved={saved => {
-                    if (formArticle) {
-                        setArticles(prev => prev.map(a => a.id === saved.id ? saved : a));
-                    } else {
-                        setArticles(prev => [saved, ...prev]);
-                    }
-                    setFormArticle(undefined);
-                }}
-            />
-        );
-    }
+    useEffect(() => {
+        setLoading(true);
+        listArticles(page, PAGE_SIZE, filterCategory ? { category: filterCategory } : {})
+            .then(({ data, count }) => { setArticles(data); setTotal(Number(count)); })
+            .catch(() => { setArticles([]); setTotal(0); })
+            .finally(() => setLoading(false));
+    }, [page, filterCategory, refreshKey]);
 
-    // ── List view ──────────────────────────────────────────────────────────────
-    const filtered = filterCategory
-        ? articles.filter(a => a.category === filterCategory)
-        : articles;
-
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-    const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-    const handleDelete = (id: string) => {
-        setArticles(prev => prev.filter(a => a.id !== id));
-    };
+    const totalPages = Math.ceil(total / PAGE_SIZE);
 
     const selectStyle: React.CSSProperties = {
         background: 'transparent', border: 'none', fontSize: '0.875rem',
@@ -72,7 +66,7 @@ const AdminNewsSection = () => {
                     <p style={{ color: '#404752', marginTop: '0.25rem', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>Zarządzaj artykułami i wpisami akademii.</p>
                 </div>
                 <button
-                    onClick={() => setFormArticle(null)}
+                    onClick={() => navigate('/admin/articles/create')}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #0061a3 0%, #46a5fd 100%)', color: '#fff', padding: '0.75rem 1.5rem', borderRadius: '0.75rem', fontWeight: 700, fontSize: '0.875rem', border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,97,163,0.2)' }}
                 >
                     <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>add_circle</span>
@@ -82,12 +76,13 @@ const AdminNewsSection = () => {
 
             {/* Filter bar */}
             <div style={{ background: '#f1f3fb', padding: '1rem', borderRadius: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                <div style={{ background: '#fff', padding: '0.75rem 1rem', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.375rem', minWidth: '160px' }}
+                <div
+                    style={{ background: '#fff', padding: '0.75rem 1rem', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.375rem', minWidth: '160px' }}
                     onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#ebeef5'}
                     onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = '#fff'}
                 >
                     <label style={{ fontSize: '10px', fontWeight: 700, color: '#404752', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Kategoria</label>
-                    <select style={selectStyle} value={filterCategory} onChange={e => { setFilterCategory(e.target.value as ArticleCategory | ''); setPage(1); }}>
+                    <select style={selectStyle} value={filterCategory} onChange={e => { setFilterCategory(e.target.value as ArticleCategoryEnum | ''); setPage(1); }}>
                         {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                 </div>
@@ -107,19 +102,26 @@ const AdminNewsSection = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {paged.length === 0 ? (
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
+                                        Ładowanie…
+                                    </td>
+                                </tr>
+                            ) : articles.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
                                         Brak artykułów
                                     </td>
                                 </tr>
-                            ) : paged.map((article, i) => (
+                            ) : articles.map((article, i) => (
                                 <ArticleRow
-                                    key={article.id}
+                                    key={article.articleId}
                                     article={article}
+                                    categoryColor={CATEGORY_COLOR[article.category]}
                                     divider={i > 0}
-                                    onEdit={() => setFormArticle(article)}
-                                    onDelete={() => handleDelete(article.id)}
+                                    onEdit={() => navigate(`/admin/articles/${article.articleId}/edit`)}
+                                    onDeleted={() => setRefreshKey(k => k + 1)}
                                 />
                             ))}
                         </tbody>
@@ -129,7 +131,7 @@ const AdminNewsSection = () => {
                 {/* Pagination */}
                 <div style={{ padding: '1rem 1.5rem', background: 'rgba(241,243,251,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <p style={{ fontSize: '0.75rem', color: '#404752', fontWeight: 500, margin: 0 }}>
-                        Wyświetlono <strong style={{ color: '#181c21' }}>{filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)}</strong> z {filtered.length} artykułów
+                        Wyświetlono <strong style={{ color: '#181c21' }}>{total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}</strong> z {total} artykułów
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                         <PgBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
@@ -148,9 +150,9 @@ const AdminNewsSection = () => {
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginTop: '2rem' }}>
                 {[
-                    { icon: 'newspaper',  label: 'Wszystkich artykułów', value: articles.length, color: '#0061a3' },
-                    { icon: 'groups',     label: 'Kategorii',            value: CATEGORIES.length - 1, color: '#855400' },
-                    { icon: 'today',      label: 'Dodanych dziś',        value: 0, color: '#22c55e' },
+                    { icon: 'newspaper', label: 'Wszystkich artykułów', value: total,                    color: '#0061a3' },
+                    { icon: 'groups',    label: 'Kategorii',            value: CATEGORIES.length - 1,    color: '#855400' },
+                    { icon: 'today',     label: 'Dodanych dziś',        value: 0,                        color: '#22c55e' },
                 ].map(stat => (
                     <div key={stat.label} style={{ background: '#f1f3fb', padding: '1.5rem', borderRadius: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ width: '3rem', height: '3rem', borderRadius: '50%', background: `${stat.color}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -168,12 +170,15 @@ const AdminNewsSection = () => {
 };
 
 // ── Article row ────────────────────────────────────────────────────────────────
-const ArticleRow = ({ article, divider, onEdit, onDelete }: {
-    article: MockArticle; divider: boolean;
-    onEdit: () => void; onDelete: () => void;
+const ArticleRow = ({ article, categoryColor, divider, onEdit, onDeleted }: {
+    article: ArticleListItem; categoryColor: string; divider: boolean;
+    onEdit: () => void; onDeleted: () => void;
 }) => {
-    const [hovered, setHovered] = useState(false);
+    const [hovered,        setHovered]        = useState(false);
     const [actionsVisible, setActionsVisible] = useState(false);
+
+    const formatDate = (iso: string) =>
+        new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
 
     return (
         <tr
@@ -198,19 +203,19 @@ const ArticleRow = ({ article, divider, onEdit, onDelete }: {
             {/* Title */}
             <td style={{ padding: '1rem 1.5rem', maxWidth: '22rem' }}>
                 <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#181c21', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{article.title}</p>
-                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0.125rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '20rem' }}>{article.excerpt}</p>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0.125rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '20rem' }}>{article.shortPreview}</p>
             </td>
 
             {/* Category */}
             <td style={{ padding: '1rem 1.5rem' }}>
-                <span style={{ display: 'inline-block', background: article.badgeColor, color: '#fff', fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', padding: '0.2rem 0.625rem', borderRadius: '0.25rem', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-                    {article.badge}
+                <span style={{ display: 'inline-block', background: categoryColor, color: '#fff', fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', padding: '0.2rem 0.625rem', borderRadius: '0.25rem', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                    {article.category}
                 </span>
             </td>
 
             {/* Date */}
             <td style={{ padding: '1rem 1.5rem', fontSize: '0.875rem', color: '#64748b', whiteSpace: 'nowrap' }}>
-                {article.date}
+                {formatDate(article.date)}
             </td>
 
             {/* Actions */}
@@ -225,7 +230,7 @@ const ArticleRow = ({ article, divider, onEdit, onDelete }: {
                         <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>edit</span>
                     </button>
                     <button
-                        onClick={e => { e.stopPropagation(); onDelete(); }}
+                        onClick={e => { e.stopPropagation(); onDeleted(); }}
                         style={{ padding: '0.375rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', borderRadius: '0.375rem', display: 'flex' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ba1a1a'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(186,26,26,0.08)'; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#94a3b8'; (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}

@@ -1,14 +1,27 @@
 import { useRef, useState } from 'react';
 import type { ArticleBody, ArticleCategory, MockArticle } from '../../data/mockArticles';
+import { createArticle, editArticle, type ArticleCategoryEnum, type ArticleBodyTypeEnum, type ArticleResponse } from '../../services/articleService';
 
-const CATEGORIES: { value: ArticleCategory; label: string; color: string }[] = [
-    { value: 'senior',  label: 'Seniorzy',    color: '#1e293b' },
-    { value: 'junior',  label: 'Junior',       color: '#46a5fd' },
-    { value: 'mlodzik', label: 'Młodzik',      color: '#22c55e' },
-    { value: 'orlik',   label: 'Orlik',        color: '#f97316' },
-    { value: 'zak',     label: 'Żak',          color: '#eab308' },
-    { value: 'girls',   label: 'Girls Teams',  color: '#ec4899' },
+const BODY_TYPE_FROM_API: Record<ArticleBodyTypeEnum, ArticleBody['type']> = {
+    PARAGRAPH: 'paragraph',
+    QUOTE:     'quote',
+    HEADING:   'heading',
+};
+
+const CATEGORIES: { value: ArticleCategory; apiValue: ArticleCategoryEnum; label: string; color: string }[] = [
+    { value: 'senior',  apiValue: 'SENIOR',  label: 'Seniorzy',    color: '#1e293b' },
+    { value: 'junior',  apiValue: 'JUNIOR',  label: 'Junior',      color: '#46a5fd' },
+    { value: 'mlodzik', apiValue: 'MLODZIK', label: 'Młodzik',     color: '#22c55e' },
+    { value: 'orlik',   apiValue: 'ORLIK',   label: 'Orlik',       color: '#f97316' },
+    { value: 'zak',     apiValue: 'ZAK',     label: 'Żak',         color: '#eab308' },
+    { value: 'girls',   apiValue: 'GIRLS',   label: 'Girls Teams', color: '#ec4899' },
 ];
+
+const BODY_TYPE_MAP: Record<ArticleBody['type'], ArticleBodyTypeEnum> = {
+    paragraph: 'PARAGRAPH',
+    quote:     'QUOTE',
+    heading:   'HEADING',
+};
 
 const BODY_TYPE_LABELS: Record<ArticleBody['type'], string> = {
     paragraph: 'Paragraf',
@@ -16,22 +29,85 @@ const BODY_TYPE_LABELS: Record<ArticleBody['type'], string> = {
     heading:   'Nagłówek',
 };
 
+// ── Upload zone (must be outside parent to avoid remount on every render) ──────
+interface UploadZoneProps {
+    preview: string; hover: boolean; label: string;
+    onHover: () => void; onLeave: () => void; onClick: () => void;
+    inputRef: React.RefObject<HTMLInputElement | null>;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+const UploadZone = ({ preview, hover, onHover, onLeave, onClick, label, inputRef, onChange }: UploadZoneProps) => {
+    const labelStyle: React.CSSProperties = {
+        display: 'block', fontSize: '10px', fontWeight: 700,
+        textTransform: 'uppercase', letterSpacing: '0.12em',
+        color: '#404752', marginBottom: '0.375rem',
+    };
+    return (
+        <div>
+            <label style={labelStyle}>{label}</label>
+            <div
+                onClick={onClick}
+                onMouseEnter={onHover}
+                onMouseLeave={onLeave}
+                style={{
+                    position: 'relative', borderRadius: '0.625rem', overflow: 'hidden',
+                    aspectRatio: '16/9', background: '#f1f3fb',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    border: `2px dashed ${hover ? '#0061a3' : 'rgba(192,199,212,0.4)'}`,
+                    cursor: 'pointer', transition: 'border-color 0.2s', marginTop: '0.5rem',
+                }}
+            >
+                {preview && (
+                    <img src={preview} alt="Preview" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', opacity: preview && !hover ? 0 : 1, transition: 'opacity 0.2s' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '2.5rem', color: hover ? '#0061a3' : '#94a3b8', transition: 'color 0.2s' }}>add_photo_alternate</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#404752' }}>Kliknij aby dodać zdjęcie</span>
+                    <span style={{ fontSize: '10px', color: '#707883' }}>PNG, JPG do 10MB</span>
+                </div>
+                {preview && hover && (
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '2rem', color: '#fff' }}>photo_camera</span>
+                    </div>
+                )}
+                <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onChange} />
+            </div>
+        </div>
+    );
+};
+
+// ── Main form ──────────────────────────────────────────────────────────────────
 interface Props {
-    article?: MockArticle;
+    article?: MockArticle;          // legacy local mock (create flow)
+    articleResponse?: ArticleResponse; // real API data (edit flow)
     onBack: () => void;
     onSaved: (article: MockArticle) => void;
 }
 
-const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
-    const isEdit = !!article;
+const AdminNewsFormSection = ({ article, articleResponse, onBack, onSaved }: Props) => {
+    const isEdit = !!(article || articleResponse);
 
-    const [title,    setTitle]    = useState(article?.title    ?? '');
-    const [excerpt,  setExcerpt]  = useState(article?.excerpt  ?? '');
+    // Prefer real API response, fall back to local mock
+    const initialTitle   = articleResponse?.title        ?? article?.title    ?? '';
+    const initialExcerpt = articleResponse?.shortPreview ?? article?.excerpt  ?? '';
+    const initialBody: ArticleBody[] = articleResponse
+        ? [...articleResponse.body]
+            .sort((a, b) => a.orderIndex - b.orderIndex)
+            .map(b => ({ type: BODY_TYPE_FROM_API[b.type], text: b.text }))
+        : (article?.body ?? [{ type: 'paragraph', text: '' }]);
+    const initialImage     = articleResponse?.image     ?? article?.image     ?? '';
+    const initialHeroImage = articleResponse?.heroImage ?? article?.heroImage ?? '';
+
+    const [title,    setTitle]    = useState(initialTitle);
+    const [excerpt,  setExcerpt]  = useState(initialExcerpt);
     const [category, setCategory] = useState<ArticleCategory>(article?.category ?? 'senior');
-    const [body,     setBody]     = useState<ArticleBody[]>(article?.body ?? [{ type: 'paragraph', text: '' }]);
+    const [body,     setBody]     = useState<ArticleBody[]>(initialBody);
 
-    const [imagePreview,     setImagePreview]     = useState<string>(article?.image     ?? '');
-    const [heroImagePreview, setHeroImagePreview] = useState<string>(article?.heroImage ?? '');
+    const [imagePreview,     setImagePreview]     = useState<string>(initialImage);
+    const [heroImagePreview, setHeroImagePreview] = useState<string>(initialHeroImage);
+    const [imageFile,        setImageFile]        = useState<File | null>(null);
+    const [heroImageFile,    setHeroImageFile]    = useState<File | null>(null);
     const [imageHover,       setImageHover]       = useState(false);
     const [heroHover,        setHeroHover]        = useState(false);
 
@@ -67,9 +143,13 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
         borderBottom: '1px solid #f1f3fb',
     };
 
-    const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>, setPreview: (v: string) => void) => {
+    const handleImageFile = (
+        e: React.ChangeEvent<HTMLInputElement>,
+        setPreview: (v: string) => void,
+        setFile: (f: File) => void,
+    ) => {
         const file = e.target.files?.[0];
-        if (file) setPreview(URL.createObjectURL(file));
+        if (file) { setPreview(URL.createObjectURL(file)); setFile(file); }
     };
 
     const addBodyBlock = (type: ArticleBody['type']) => {
@@ -82,6 +162,16 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
 
     const removeBodyBlock = (i: number) => {
         setBody(b => b.filter((_, idx) => idx !== i));
+    };
+
+    const moveBodyBlock = (i: number, dir: -1 | 1) => {
+        setBody(b => {
+            const next = [...b];
+            const target = i + dir;
+            if (target < 0 || target >= next.length) return next;
+            [next[i], next[target]] = [next[target], next[i]];
+            return next;
+        });
     };
 
     const validate = () => {
@@ -97,6 +187,30 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
         setSaving(true);
         try {
             const cat = CATEGORIES.find(c => c.value === category)!;
+            const requestData = {
+                title:        title.trim(),
+                shortPreview: excerpt.trim(),
+                category:     cat.apiValue,
+                body:         body
+                    .filter(b => b.text.trim())
+                    .map(b => ({ type: BODY_TYPE_MAP[b.type], text: b.text.trim() })),
+            };
+
+            if (articleResponse) {
+                await editArticle(
+                    articleResponse.articleId,
+                    requestData,
+                    imageFile     ?? undefined,
+                    heroImageFile ?? undefined,
+                );
+            } else {
+                await createArticle(
+                    requestData,
+                    imageFile     ?? undefined,
+                    heroImageFile ?? undefined,
+                );
+            }
+            // Build a local representation for the parent list to display immediately
             const saved: MockArticle = {
                 id:        article?.id ?? `article-${Date.now()}`,
                 category,
@@ -115,46 +229,6 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
             setSaving(false);
         }
     };
-
-    const UploadZone = ({
-        preview, hover, onHover, onLeave, onClick, label, inputRef, onChange,
-    }: {
-        preview: string; hover: boolean; onHover: () => void; onLeave: () => void;
-        onClick: () => void; label: string;
-        inputRef: React.RefObject<HTMLInputElement | null>;
-        onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    }) => (
-        <div>
-            <label style={labelStyle}>{label}</label>
-            <div
-                onClick={onClick}
-                onMouseEnter={onHover}
-                onMouseLeave={onLeave}
-                style={{
-                    position: 'relative', borderRadius: '0.625rem', overflow: 'hidden',
-                    aspectRatio: '16/9', background: '#f1f3fb',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    border: `2px dashed ${hover ? '#0061a3' : 'rgba(192,199,212,0.4)'}`,
-                    cursor: 'pointer', transition: 'border-color 0.2s', marginTop: '0.5rem',
-                }}
-            >
-                {preview && (
-                    <img src={preview} alt="Preview" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                )}
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', opacity: preview && !hover ? 0 : 1, transition: 'opacity 0.2s' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '2.5rem', color: hover ? '#0061a3' : '#94a3b8', transition: 'color 0.2s' }}>add_photo_alternate</span>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#404752' }}>Kliknij aby dodać zdjęcie</span>
-                    <span style={{ fontSize: '10px', color: '#707883' }}>PNG, JPG do 10MB</span>
-                </div>
-                {preview && hover && (
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '2rem', color: '#fff' }}>photo_camera</span>
-                    </div>
-                )}
-                <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onChange} />
-            </div>
-        </div>
-    );
 
     return (
         <div style={{ fontFamily: "'Inter', sans-serif", color: '#181c21', background: '#f8f9ff', minHeight: '100%', boxSizing: 'border-box', width: '100%' }}>
@@ -278,6 +352,8 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {body.map((block, i) => (
                                     <div key={i} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+
+                                        {/* Type label */}
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', paddingTop: '0.25rem', flexShrink: 0 }}>
                                             <span style={{
                                                 fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em',
@@ -287,6 +363,8 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
                                                 {BODY_TYPE_LABELS[block.type]}
                                             </span>
                                         </div>
+
+                                        {/* Input */}
                                         <div style={{ flex: 1 }}>
                                             {block.type === 'paragraph' ? (
                                                 <textarea
@@ -319,14 +397,39 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
                                                 />
                                             )}
                                         </div>
-                                        <button
-                                            onClick={() => removeBodyBlock(i)}
-                                            style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', borderRadius: '0.375rem', flexShrink: 0 }}
-                                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ba1a1a'; (e.currentTarget as HTMLElement).style.background = 'rgba(186,26,26,0.06)'; }}
-                                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; (e.currentTarget as HTMLElement).style.background = 'none'; }}
-                                        >
-                                            <span className="material-symbols-outlined" style={{ fontSize: '1.125rem' }}>delete</span>
-                                        </button>
+
+                                        {/* Order + delete controls */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flexShrink: 0 }}>
+                                            <button
+                                                onClick={() => moveBodyBlock(i, -1)}
+                                                disabled={i === 0}
+                                                title="Przesuń wyżej"
+                                                style={{ padding: '0.3rem', background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? '#e0e2ea' : '#94a3b8', borderRadius: '0.375rem', display: 'flex' }}
+                                                onMouseEnter={e => { if (i > 0) (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; }}
+                                                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'none'}
+                                            >
+                                                <span className="material-symbols-outlined" style={{ fontSize: '1.125rem' }}>arrow_upward</span>
+                                            </button>
+                                            <button
+                                                onClick={() => moveBodyBlock(i, 1)}
+                                                disabled={i === body.length - 1}
+                                                title="Przesuń niżej"
+                                                style={{ padding: '0.3rem', background: 'none', border: 'none', cursor: i === body.length - 1 ? 'default' : 'pointer', color: i === body.length - 1 ? '#e0e2ea' : '#94a3b8', borderRadius: '0.375rem', display: 'flex' }}
+                                                onMouseEnter={e => { if (i < body.length - 1) (e.currentTarget as HTMLElement).style.background = '#f1f3fb'; }}
+                                                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'none'}
+                                            >
+                                                <span className="material-symbols-outlined" style={{ fontSize: '1.125rem' }}>arrow_downward</span>
+                                            </button>
+                                            <button
+                                                onClick={() => removeBodyBlock(i)}
+                                                title="Usuń blok"
+                                                style={{ padding: '0.3rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', borderRadius: '0.375rem', display: 'flex' }}
+                                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ba1a1a'; (e.currentTarget as HTMLElement).style.background = 'rgba(186,26,26,0.06)'; }}
+                                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; (e.currentTarget as HTMLElement).style.background = 'none'; }}
+                                            >
+                                                <span className="material-symbols-outlined" style={{ fontSize: '1.125rem' }}>delete</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
 
@@ -360,7 +463,7 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
                                 onClick={() => imageRef.current?.click()}
                                 label="Zdjęcie na liście"
                                 inputRef={imageRef}
-                                onChange={e => handleImageFile(e, setImagePreview)}
+                                onChange={e => handleImageFile(e, setImagePreview, setImageFile)}
                             />
                         </div>
 
@@ -373,7 +476,7 @@ const AdminNewsFormSection = ({ article, onBack, onSaved }: Props) => {
                                 onClick={() => heroImageRef.current?.click()}
                                 label="Zdjęcie nagłówkowe (hero)"
                                 inputRef={heroImageRef}
-                                onChange={e => handleImageFile(e, setHeroImagePreview)}
+                                onChange={e => handleImageFile(e, setHeroImagePreview, setHeroImageFile)}
                             />
                         </div>
 

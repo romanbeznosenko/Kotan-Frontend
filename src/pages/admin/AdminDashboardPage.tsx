@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import AdminMenu from '../../components/admin/AdminMenu';
-import type { AdminMenuKey } from '../../components/admin/AdminMenu';
+import AdminMenu, { type AdminMenuKey } from '../../components/admin/AdminMenu';
 import AdminCompetitionTable from '../../components/admin/AdminCompetitionTable';
 import AdminClubsSection from '../../components/admin/AdminClubsSection';
 import AdminTeamsSection from '../../components/admin/AdminTeamsSection';
@@ -9,12 +8,12 @@ import AdminPlayersSection from '../../components/admin/AdminPlayersSection';
 import AdminNewsSection from '../../components/admin/AdminNewsSection';
 
 const tableMap: Partial<Record<AdminMenuKey, React.ReactElement>> = {
-    dashboard: <AdminDashboardSection />,
+    dashboard:    <AdminDashboardSection />,
     competitions: <AdminCompetitionTable />,
-    clubs: <AdminClubsSection />,
-    teams: <AdminTeamsSection />,
-    players: <AdminPlayersSection />,
-    articles: <AdminNewsSection />,
+    clubs:        <AdminClubsSection />,
+    teams:        <AdminTeamsSection />,
+    players:      <AdminPlayersSection />,
+    articles:     <AdminNewsSection />,
 };
 
 const AdminDashboardPage: React.FC = () => {
@@ -31,8 +30,6 @@ const AdminDashboardPage: React.FC = () => {
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh', width: '100vw', fontFamily: "'Inter', sans-serif" }}>
-
-            {/* Sidebar */}
             <aside style={{
                 position: 'fixed', left: 0, top: 0, height: '100vh', width: '16rem',
                 background: '#020617', display: 'flex', flexDirection: 'column',
@@ -41,7 +38,6 @@ const AdminDashboardPage: React.FC = () => {
                 <AdminMenu selectedKey={selectedKey} onSelect={handleSelect} />
             </aside>
 
-            {/* Main */}
             <main style={{ marginLeft: '16rem', flex: 1, minHeight: '100vh', overflowY: 'auto', background: '#f8f9ff' }}>
                 {content ?? (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.875rem' }}>
